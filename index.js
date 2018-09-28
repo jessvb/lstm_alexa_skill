@@ -19,17 +19,21 @@ const Alexa = require('alexa-sdk');
 const APP_ID = undefined;
 
 // for getting info from csail server:
-const fetch = require("node-fetch");
-const csail_url = "http://appinventor-alexa.csail.mit.edu:1234/?word=hello";
-const getText = async function (url) {
-    let json;
-    try {
-        const response = await fetch(url);
-        json = await response.json();
-    } catch (err) {
-        console.log(err);
-    }
-    return json;
+const fetch = require('node-fetch');
+const csail_url = 'http://appinventor-alexa.csail.mit.edu:1234/';
+const qInputText = '?inputText=';
+const exampleInputText =
+    'Once upon a time, a rabbit bounced through the air. She landed directly in a large puddle.';
+const getText = async function(baseUrl, query, input) {
+  let json;
+  let url = baseUrl + query + input;
+  try {
+    const response = await fetch(url);
+    json = await response.json();
+  } catch (err) {
+    console.log(err);
+  }
+  return json;
 };
 
 // for speech and alexa app:
@@ -50,68 +54,75 @@ const FALLBACK_MESSAGE = 'I\'m not sure what you mean. ' +
 //=========================================================================================================================================
 
 const handlers = {
-    'LaunchRequest': function () {
-        this.response.speak(LAUNCH_MESSAGE);
-        this.emit(':responseReady');
-    },
-    'LSTM_output': async function () {
+  'LaunchRequest': function() {
+    this.response.speak(LAUNCH_MESSAGE);
+    this.emit(':responseReady');
+  },
+  'LSTM_output': async function() {
+    // GET lstm output from csail server
+    let error;
+    let text;
+    // first test to make sure the server is running
+    // try {
+    //   let test = await getText(csail_url, qInputText, 'test');
+    //   console.log(test.generated);
+    // } catch (err) {
+    //   error = 'ERROR: ' + err;
+    // }
+    // if (error == null) {
+      // if the test worked without error, try generating text!
+      try {
+        let json = await getText(csail_url, qInputText, exampleInputText);
+        text = json.generated;
+      } catch (err) {
+        error = 'ERROR: ' + err;
+      }
+    // }
 
-            // GET lstm output from csail server
-            let error;
-            let text;
-            try {
-            let json = await getText(csail_url);
-            text = json.thing;
-            } catch (err) {
-                error = 'ERROR: ' + err;
-            }
+    // Feedback for the user:
+    let voiceOutput = '';
+    let cardOutput = '';
+    if (error) {
+      voiceOutput = 'There was an error. Please try again later. ';
+      cardOutput = voiceOutput +
+          ' You may include the following error code with your post on the forums: ' +
+          error;
+    } else {
+      voiceOutput = 'Here\'s the story: \"' + text + '\". ';
+      cardOutput = voiceOutput + 'Hope it\'s interesting!';
+    }
+    // render a card in the alexa app:
+    this.response.cardRenderer(SKILL_NAME, cardOutput);
+    // voice output from alexa:
+    this.response.speak(voiceOutput);
+    this.emit(':responseReady');
+  },
+  'AMAZON.FallbackIntent': function() {
+    const speechOutput = FALLBACK_MESSAGE;
 
-            // Feedback for the user:
-            let voiceOutput = '';
-            let cardOutput = '';
-            if (error) {
-                voiceOutput =
-                    'There was an error. Please try again later. ';
-                cardOutput = voiceOutput +
-                    ' You may include the following error code with your post on the forums: ' +
-                    error;
-            } else {
-                voiceOutput = 'Here\'s the story: \"' + text + '\".';
-                cardOutput = voiceOutput + 
-                    'Hope it\'s interesting!';
-            }
-            // render a card in the alexa app:
-            this.response.cardRenderer(SKILL_NAME, cardOutput);
-            // voice output from alexa:
-            this.response.speak(voiceOutput);
-            this.emit(':responseReady');
-        },
-        'AMAZON.FallbackIntent': function () {
-            const speechOutput = FALLBACK_MESSAGE;
+    this.response.speak(speechOutput);
+    this.emit(':responseReady');
+  },
+  'AMAZON.HelpIntent': function() {
+    const speechOutput = HELP_MESSAGE;
+    const reprompt = HELP_REPROMPT;
 
-            this.response.speak(speechOutput);
-            this.emit(':responseReady');
-        },
-        'AMAZON.HelpIntent': function () {
-            const speechOutput = HELP_MESSAGE;
-            const reprompt = HELP_REPROMPT;
-
-            this.response.speak(speechOutput).listen(reprompt);
-            this.emit(':responseReady');
-        },
-        'AMAZON.CancelIntent': function () {
-            this.response.speak(STOP_MESSAGE);
-            this.emit(':responseReady');
-        },
-        'AMAZON.StopIntent': function () {
-            this.response.speak(STOP_MESSAGE);
-            this.emit(':responseReady');
-        },
+    this.response.speak(speechOutput).listen(reprompt);
+    this.emit(':responseReady');
+  },
+  'AMAZON.CancelIntent': function() {
+    this.response.speak(STOP_MESSAGE);
+    this.emit(':responseReady');
+  },
+  'AMAZON.StopIntent': function() {
+    this.response.speak(STOP_MESSAGE);
+    this.emit(':responseReady');
+  },
 };
 
-exports.handler = function (event, context, callback) {
-    const alexa = Alexa.handler(event, context, callback);
-    alexa.APP_ID = APP_ID;
-    alexa.registerHandlers(handlers);
-    alexa.execute();
+exports.handler = function(event, context, callback) {
+  const alexa = Alexa.handler(event, context, callback);
+  alexa.APP_ID = APP_ID;
+  alexa.registerHandlers(handlers);
+  alexa.execute();
 };
