@@ -36,8 +36,24 @@ const getText = async function(baseUrl, query, input) {
   return json;
 };
 
+// for sending signal to app inventor:
+let projectName = 'sentence_inventor';
+const ALEXA_TAG = '_ALEXA_SIGNAL_';
+const urlHostPort = 'rediss://clouddb.appinventor.mit.edu:6381';
+const authKey = require('./authKey');
+const redis = require('redis');
+const SET_SUB_SCRIPT = 'local key = KEYS[1];' +
+    'local value = ARGV[1];' +
+    'local topublish = cjson.decode(ARGV[2]);' +
+    'local project = ARGV[3];' +
+    'local newtable = {};' +
+    'table.insert(newtable, key);' +
+    'table.insert(newtable, topublish);' +
+    'redis.call("publish", project, cjson.encode(newtable));' +
+    'return redis.call(\'set\', project .. ":" .. key, value);';
+
 // for speech and alexa app:
-const SKILL_NAME = 'Story Generator';
+const SKILL_NAME = 'Sentence Inventor';
 const LAUNCH_MESSAGE =
     'Let\'s generate some text! Tell me, "generate words", and I\'ll go for it!';
 const HELP_MESSAGE =
@@ -55,12 +71,12 @@ const FALLBACK_MESSAGE = 'I\'m not sure what you mean. ' +
 
 const handlers = {
   'LaunchRequest': function() {
-    this.response.speak(LAUNCH_MESSAGE);
+    this.response.speak(LAUNCH_MESSAGE).listen();
     this.emit(':responseReady');
   },
   'LSTM_output': async function() {
     // GET lstm output from csail server
-    let error;
+    let genErr;
     let text;
     // first test to make sure the server is running
     // try {
@@ -70,26 +86,65 @@ const handlers = {
     //   error = 'ERROR: ' + err;
     // }
     // if (error == null) {
-      // if the test worked without error, try generating text!
-      try {
-        let json = await getText(csail_url, qInputText, exampleInputText);
-        text = json.generated;
-      } catch (err) {
-        error = 'ERROR: ' + err;
-      }
+    // if the test worked without error, try generating text!
+    try {
+      let json = await getText(csail_url, qInputText, exampleInputText);
+      text = json.generated;
+    } catch (err) {
+      genErr = 'ERROR: ' + err;
+    }
     // }
+
+    // if there's text, send a signal to app inventor with the text
+    let sendErr = null;
+    if (text != null) {
+      // for lambda redis
+      let client = redis.createClient(
+          urlHostPort, {'password': authKey.getAuthKey(), 'tls': {}});
+      let tag = ALEXA_TAG;
+      let value = text;
+      // Sets and PUBLISHES in clouddb (this will be noticed by App
+      // Inventor components subscribed to the updates)
+      console.log('stringified value: ' + JSON.stringify([value])); // TODO DEL
+      client.eval(
+          // Calling convention: tag, value, json encoded list of values,
+          // project,
+          // ...
+          SET_SUB_SCRIPT, 1, tag, value, JSON.stringify([JSON.stringify(value)]), projectName,
+          function(e, r) {
+            if (e) {
+              console.error('Something went wrong with client.eval: ', e);
+              sendErr += 'ERROR: ' + e;
+            } else {
+              if (r) {
+                // response = r;
+              }
+            }
+
+            // quit redis:
+            client.end(function(err) {
+              if (err) {
+                console.error('Error when quitting redis: ', err);
+                sendErr += 'ERROR: ' + e;
+              }
+            });
+          });
+    }
 
     // Feedback for the user:
     let voiceOutput = '';
     let cardOutput = '';
-    if (error) {
-      voiceOutput = 'There was an error. Please try again later. ';
+    if (genErr) {
+      voiceOutput = 'There was an error generating text. Please try again later. ';
       cardOutput = voiceOutput +
           ' You may include the following error code with your post on the forums: ' +
-          error;
+          genErr;
     } else {
-      voiceOutput = 'Here\'s the story: \"' + text + '\". ';
-      cardOutput = voiceOutput + 'Hope it\'s interesting!';
+      if (sendErr){
+        voiceOutput += 'There was an error sending to App Inventor. Nonetheless, ';
+      }
+      voiceOutput += 'Here\'s the story: \"' + text + '\". ';
+      cardOutput += voiceOutput + 'Hope it\'s interesting!';
     }
     // render a card in the alexa app:
     this.response.cardRenderer(SKILL_NAME, cardOutput);
