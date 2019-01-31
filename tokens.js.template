@@ -1,0 +1,10 @@
+module.exports = {
+    getAuthKey: function () {
+        // MIT App Inventor CloudDB Token:
+        return 'insert_clouddb_token_here';
+    },
+    getAppId: function () {
+        // Amazon Alexa Skill ID:
+        return 'amzn1.ask.skill.XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXX';
+    }
+}

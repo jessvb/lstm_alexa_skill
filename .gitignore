@@ -76,5 +76,12 @@ typings/
 # Serverless directories
 .serverless
 
+# macos
+.DS_Store
 
 # End of https://www.gitignore.io/api/node
+
+
+## Additional ignores ##
+# To protect the auth key and tokens
+tokens.js

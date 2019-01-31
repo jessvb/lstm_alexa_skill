@@ -12,12 +12,6 @@ const Alexa = require('alexa-sdk');
 // Constants:
 //=========================================================================================================================================
 
-// Replace with your app ID (OPTIONAL).  You can find this value at the top of
-// your skill's page on http://developer.amazon.com.  Make sure to enclose your
-// value in quotes, like this: const APP_ID =
-// 'amzn1.ask.skill.bb4045e6-b3e8-4133-b650-72923c5980f1';
-const APP_ID = undefined;
-
 // for getting info from csail server:
 const fetch = require('node-fetch');
 const csail_url = 'http://appinventor-alexa.csail.mit.edu:1234/';
@@ -40,7 +34,7 @@ const getText = async function(baseUrl, query, input) {
 let projectName = 'sentence_inventor';
 const ALEXA_TAG = '_ALEXA_SIGNAL_';
 const urlHostPort = 'rediss://clouddb.appinventor.mit.edu:6381';
-const authKey = require('./authKey');
+const tokens = require('./tokens');
 const redis = require('redis');
 const SET_SUB_SCRIPT = 'local key = KEYS[1];' +
     'local value = ARGV[1];' +
@@ -63,6 +57,12 @@ const STOP_MESSAGE = 'Closing ' + SKILL_NAME + '. Goodbye!';
 const FALLBACK_MESSAGE = 'I\'m not sure what you mean. ' +
     'I can generate text if you say,' +
     ' \'Alexa, ask ' + SKILL_NAME + ' to generate text.\'';
+
+// Replace with your app ID.  You can find this value at the top of
+// your skill's page on http://developer.amazon.com.  Make sure to enclose your
+// value in quotes, like this: const APP_ID =
+// 'amzn1.ask.skill.XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXXX';
+const APP_ID = tokens.getAppId();
 
 
 //=========================================================================================================================================
@@ -100,7 +100,7 @@ const handlers = {
     if (text != null) {
       // for lambda redis
       let client = redis.createClient(
-          urlHostPort, {'password': authKey.getAuthKey(), 'tls': {}});
+          urlHostPort, {'password': tokens.getAuthKey(), 'tls': {}});
       let tag = ALEXA_TAG;
       let value = text;
       // Sets and PUBLISHES in clouddb (this will be noticed by App
@@ -177,7 +177,7 @@ const handlers = {
 
 exports.handler = function(event, context, callback) {
   const alexa = Alexa.handler(event, context, callback);
-  alexa.APP_ID = APP_ID;
+  alexa.appId = APP_ID;
   alexa.registerHandlers(handlers);
   alexa.execute();
 };
